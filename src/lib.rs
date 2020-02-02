@@ -18,6 +18,7 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
     } = syn::parse_macro_input!(attr as FnAttr);
     let item: syn::ItemFn = syn::parse(item).unwrap();
     let return_type = &item.sig.output;
+    let return_marker_type = return_marker_type(&return_type);
     let args: Vec<&syn::PatType> = item
         .sig
         .inputs
@@ -30,6 +31,7 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
     let vis = &item.vis;
 
     let args = parse_typed_args(&args);
+    let (impl_generics, ty_generics, where_clause) = item.sig.generics.split_for_impl();
     let (arg_name, req_ident, req_ty, opt_ident, opt_ty, opt_default_value) = separate_args(&args);
 
     let mut inner_func = item.clone();
@@ -38,12 +40,13 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
     let func_name = &inner_func.sig.ident;
 
     let expanded = quote! {
-        #vis struct #builder_struct_name {
+        #vis struct #builder_struct_name #ty_generics {
             #(#req_ident: #req_ty,)*
             #(#opt_ident: core::option::Option<#opt_ty>,)*
+            _result_marker: core::marker::PhantomData<fn() -> #return_marker_type>
         }
 
-        impl #builder_struct_name {
+        impl #impl_generics #builder_struct_name #ty_generics {
             #(
                 #vis fn #opt_ident(mut self, value: #opt_ty) -> Self {
                     self.#opt_ident = Some(value);
@@ -51,7 +54,7 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             )*
 
-            #vis fn #finish_method_name(self) #return_type {
+            #vis fn #finish_method_name(self) #return_type #where_clause {
                 #inner_func
 
                 #(
@@ -68,11 +71,11 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
-        #vis fn #func_name(
+        #vis fn #func_name #ty_generics (
             #(
                 #req_ident: #req_ty,
             )*
-        ) -> #builder_struct_name {
+        ) -> #builder_struct_name #ty_generics #where_clause {
             #builder_struct_name {
                 #(
                     #req_ident,
@@ -80,6 +83,7 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #(
                     #opt_ident: core::option::Option::None,
                 )*
+                _result_marker: core::marker::PhantomData,
             }
         }
     };
@@ -197,5 +201,15 @@ fn erase_optarg_attr(sig: &mut syn::Signature) {
             }
             _ => (),
         }
+    }
+}
+
+fn return_marker_type(return_type: &syn::ReturnType) -> syn::Type {
+    match return_type {
+        syn::ReturnType::Default => {
+            let unit = quote! { () };
+            syn::parse2(unit).unwrap()
+        }
+        syn::ReturnType::Type(_arrow, ty) => (**ty).clone(),
     }
 }
