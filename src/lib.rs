@@ -27,29 +27,31 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
             syn::FnArg::Receiver(_) => panic!(),
         })
         .collect();
+    let vis = &item.vis;
 
     let args = parse_typed_args(&args);
     let (arg_name, req_ident, req_ty, opt_ident, opt_ty, opt_default_value) = separate_args(&args);
 
     let mut inner_func = item.clone();
     erase_optarg_attr(&mut inner_func.sig);
+    inner_func.vis = syn::Visibility::Inherited;
     let func_name = &inner_func.sig.ident;
 
     let expanded = quote! {
-        struct #builder_struct_name {
+        #vis struct #builder_struct_name {
             #(#req_ident: #req_ty,)*
             #(#opt_ident: core::option::Option<#opt_ty>,)*
         }
 
         impl #builder_struct_name {
             #(
-                fn #opt_ident(mut self, value: #opt_ty) -> Self {
+                #vis fn #opt_ident(mut self, value: #opt_ty) -> Self {
                     self.#opt_ident = Some(value);
                     self
                 }
             )*
 
-            fn #finish_method_name(self) #return_type {
+            #vis fn #finish_method_name(self) #return_type {
                 #inner_func
 
                 #(
@@ -66,7 +68,7 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
-        fn #func_name(
+        #vis fn #func_name(
             #(
                 #req_ident: #req_ty,
             )*
