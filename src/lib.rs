@@ -33,6 +33,7 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = parse_typed_args(&args);
     let (impl_generics, ty_generics, where_clause) = item.sig.generics.split_for_impl();
     let (arg_name, req_ident, req_ty, opt_ident, opt_ty, opt_default_value) = separate_args(&args);
+    let func_attrs = &item.attrs;
 
     let mut inner_func = item.clone();
     erase_optarg_attr(&mut inner_func.sig);
@@ -71,6 +72,7 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
+        #(#func_attrs)*
         #vis fn #func_name #ty_generics (
             #(
                 #req_ident: #req_ty,
