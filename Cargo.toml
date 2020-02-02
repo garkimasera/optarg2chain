@@ -1,0 +1,12 @@
+[package]
+name = "optarg2chain"
+version = "0.1.0"
+authors = ["T. Okubo <t.okubo.rx78+devel@gmail.com>"]
+edition = "2018"
+
+[lib]
+proc_macro = true
+
+[dependencies]
+syn = { version = "1", features = ["full", "extra-traits"] }
+quote = "1"
