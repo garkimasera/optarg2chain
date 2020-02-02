@@ -141,10 +141,9 @@ fn parse_arg_attr(attrs: &[syn::Attribute], ty: &syn::Type) -> Option<syn::Expr>
             return Some(attr.parse_args().unwrap());
         } else if attr.path.is_ident(ATTR_NAME_DEFAULT_ARG) {
             assert!(attr.tokens.is_empty());
-            let e = quote! {
+            return Some(syn::parse_quote! {
                 <#ty as core::default::Default>::default()
-            };
-            return Some(syn::parse2(e).unwrap());
+            });
         } else {
             continue;
         }
@@ -207,8 +206,7 @@ fn erase_optarg_attr(sig: &mut syn::Signature) {
 fn return_marker_type(return_type: &syn::ReturnType) -> syn::Type {
     match return_type {
         syn::ReturnType::Default => {
-            let unit = quote! { () };
-            syn::parse2(unit).unwrap()
+            syn::parse_quote! { () }
         }
         syn::ReturnType::Type(_arrow, ty) => (**ty).clone(),
     }
