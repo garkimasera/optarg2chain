@@ -1,14 +1,17 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-// use proc_macro2;
+use proc_macro2::Span;
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
 
+const ATTR_PREFIX: &str = "optarg";
 const ATTR_NAME_OPT_ARG: &str = "optarg";
 const ATTR_NAME_DEFAULT_ARG: &str = "optarg_default";
+const ATTR_NAME_METHOD: &str = "optarg_method";
 
 const ERR_MSG_EMPTY_ARG: &str = "no arguments";
+const ERR_MSG_TRAIT_IMPL: &str = "impl for traits is not supported";
 
 #[proc_macro_attribute]
 pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -32,7 +35,8 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let args = parse_typed_args(&args);
     let (impl_generics, ty_generics, where_clause) = item.sig.generics.split_for_impl();
-    let (arg_name, req_ident, req_ty, opt_ident, opt_ty, opt_default_value) = separate_args(&args);
+    let (arg_name, _, req_ident, req_ty, opt_ident, opt_ty, opt_default_value) =
+        separate_args(&args);
     let func_attrs = &item.attrs;
 
     let mut inner_func = item.clone();
@@ -91,6 +95,147 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+#[proc_macro_attribute]
+pub fn optarg_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let mut item: syn::ItemImpl = syn::parse(item).unwrap();
+    assert!(item.trait_.is_none(), ERR_MSG_TRAIT_IMPL);
+
+    let self_ty = &item.self_ty;
+
+    let (optarg_items, normal_items): (Vec<syn::ImplItem>, Vec<syn::ImplItem>) =
+        item.items.iter().cloned().partition(|item| match item {
+            syn::ImplItem::Method(method) => {
+                for attr in &method.attrs {
+                    if attr.path.is_ident(ATTR_NAME_METHOD) {
+                        return true;
+                    }
+                }
+                false
+            }
+            _ => false,
+        });
+
+    let mut optarg_methods = vec![];
+    let mut optarg_structs = vec![];
+    let mut optarg_struct_impls = vec![];
+
+    for item in optarg_items {
+        match item {
+            syn::ImplItem::Method(method) => {
+                let (mut optarg_method, optarg_struct, optarg_struct_impl) =
+                    optarg_method(method, self_ty);
+                optarg_methods.append(&mut optarg_method);
+                optarg_structs.push(optarg_struct);
+                optarg_struct_impls.push(optarg_struct_impl);
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    item.items = normal_items;
+    item.items.append(&mut optarg_methods);
+
+    let expanded = quote! {
+        #item
+        #(#optarg_structs)*
+        #(#optarg_struct_impls)*
+    };
+    TokenStream::from(expanded)
+}
+
+fn optarg_method(
+    input: syn::ImplItemMethod,
+    self_ty: &syn::Type,
+) -> (Vec<syn::ImplItem>, syn::ItemStruct, syn::ItemImpl) {
+    let (optarg_attrs, other_attrs) = separete_attrs(&input.attrs);
+    let FnAttr {
+        builder_struct_name,
+        finish_method_name,
+    } = optarg_attrs[0].parse_args().unwrap();
+    let vis = input.vis;
+    let return_type = &input.sig.output;
+    let return_marker_type = return_marker_type(&return_type);
+    let method_name = &input.sig.ident;
+    let (original_receiver, receiver_ident, receiver_ty, additional_lifetime, args) =
+        separate_receiver(&input.sig, self_ty);
+
+    let args = parse_typed_args(&args);
+    let (arg_name, arg_ty, req_ident, req_ty, opt_ident, opt_ty, opt_default_value) =
+        separate_args(&args);
+
+    let insert_self = if receiver_ident.is_empty() {
+        None
+    } else {
+        Some(quote! { #(#receiver_ident: self)* })
+    };
+
+    let inner_method_ident = syn::Ident::new(
+        &format!("_optarg_inner_{}", method_name),
+        method_name.span(),
+    );
+    let inner_method_block = &input.block;
+
+    let inner_method: syn::ImplItem = syn::parse_quote! {
+        fn #inner_method_ident<#(#additional_lifetime,)*>(
+            #(#original_receiver,)*
+            #(#arg_name: #arg_ty,)*) #return_type #inner_method_block
+    };
+
+    let item_struct: syn::ItemStruct = syn::parse_quote! {
+        #vis struct #builder_struct_name <#(#additional_lifetime,)*> {
+            #(#receiver_ident: #receiver_ty,)*
+            #(#req_ident: #req_ty,)*
+            #(#opt_ident: core::option::Option<#opt_ty>,)*
+            _result_marker: core::marker::PhantomData<fn() -> #return_marker_type>
+        }
+    };
+
+    let impl_item: syn::ImplItem = syn::parse_quote! {
+        #(#other_attrs)*
+        #vis fn #method_name<#(#additional_lifetime,)*> (
+            #(#original_receiver,)*
+            #(#req_ident: #req_ty,)*
+        ) -> #builder_struct_name<#(#additional_lifetime,)*> {
+            #builder_struct_name {
+                #insert_self,
+                #(
+                    #req_ident,
+                )*
+                #(
+                    #opt_ident: core::option::Option::None,
+                )*
+                _result_marker: core::marker::PhantomData,
+            }
+        }
+    };
+
+    let struct_impl: syn::ItemImpl = syn::parse_quote! {
+        impl<#(#additional_lifetime,)*> #builder_struct_name<#(#additional_lifetime,)*> {
+            #(
+                #vis fn #opt_ident(mut self, value: #opt_ty) -> Self {
+                    self.#opt_ident = Some(value);
+                    self
+                }
+            )*
+
+            #vis fn #finish_method_name(self) #return_type {
+                #(
+                    let #receiver_ident: #receiver_ty = self.#receiver_ident;
+                )*
+                #(
+                    let #req_ident: #req_ty = self.#req_ident;
+                )*
+                #(
+                    let #opt_ident: #opt_ty = self.#opt_ident.unwrap_or_else(|| { #opt_default_value });
+                )*
+                #self_ty::#inner_method_ident( #(#receiver_ident,)* #(#arg_name, )* )
+            }
+        }
+    };
+
+    (vec![impl_item, inner_method], item_struct, struct_impl)
 }
 
 struct Arg<'a> {
@@ -158,6 +303,7 @@ fn separate_args<'a>(
     args: &'a [Arg<'a>],
 ) -> (
     Vec<&'a syn::Ident>,
+    Vec<&'a syn::Type>,
     Vec<&'a syn::Ident>,
     Vec<&'a syn::Type>,
     Vec<&'a syn::Ident>,
@@ -165,6 +311,7 @@ fn separate_args<'a>(
     Vec<&'a syn::Expr>,
 ) {
     let mut arg_name = vec![];
+    let mut arg_ty = vec![];
     let mut req_ident = vec![];
     let mut req_ty = vec![];
     let mut opt_ident = vec![];
@@ -180,9 +327,11 @@ fn separate_args<'a>(
             opt_default_value.push(arg.default_value.as_ref().unwrap());
         }
         arg_name.push(arg.ident);
+        arg_ty.push(arg.ty);
     }
     (
         arg_name,
+        arg_ty,
         req_ident,
         req_ty,
         opt_ident,
@@ -212,4 +361,88 @@ fn return_marker_type(return_type: &syn::ReturnType) -> syn::Type {
         }
         syn::ReturnType::Type(_arrow, ty) => (**ty).clone(),
     }
+}
+
+fn separete_attrs<'a>(
+    attrs: &'a [syn::Attribute],
+) -> (Vec<&'a syn::Attribute>, Vec<&'a syn::Attribute>) {
+    let mut optarg_attrs = vec![];
+    let mut other_attrs = vec![];
+
+    for attr in attrs {
+        if let Some(ident) = attr.path.get_ident().map(|ident| ident.to_string()) {
+            if ident.starts_with(ATTR_PREFIX) {
+                optarg_attrs.push(attr);
+                continue;
+            }
+        }
+        other_attrs.push(attr);
+    }
+    (optarg_attrs, other_attrs)
+}
+
+// Returns (receiver, reciever ident, receiver type, additional lifetime, other args)
+fn separate_receiver<'a>(
+    sig: &'a syn::Signature,
+    self_ty: &syn::Type,
+) -> (
+    Vec<syn::Receiver>,
+    Vec<syn::Ident>,
+    Vec<syn::Type>,
+    Vec<syn::Lifetime>,
+    Vec<&'a syn::PatType>,
+) {
+    let mut receiver = None;
+    let mut args = vec![];
+    for arg in &sig.inputs {
+        match arg {
+            syn::FnArg::Receiver(r) => {
+                assert!(receiver.is_none());
+                receiver = Some(r);
+            }
+            syn::FnArg::Typed(t) => {
+                args.push(t);
+            }
+        }
+    }
+    let mut additional_lifetime: Vec<syn::Lifetime> = vec![];
+    let mut new_receiver: Vec<syn::Receiver> = vec![];
+    let (receiver_ident, receiver_ty) = if let Some(receiver) = receiver {
+        let self_ident = syn::Ident::new("_optarg_self", Span::call_site());
+        let receiver_ty: syn::Type = match (&receiver.reference, &receiver.mutability) {
+            (Some((_, None)), None) => {
+                let lifetime = syn::Lifetime::new("'_optarg_self", Span::call_site());
+                additional_lifetime = vec![lifetime.clone()];
+                new_receiver = vec![syn::parse_quote! { &#lifetime self }];
+                syn::parse_quote! { &#lifetime #self_ty }
+            }
+            (Some((_, Some(lifetime))), None) => {
+                new_receiver = vec![syn::parse_quote! { &#lifetime self }];
+                syn::parse_quote! { &#lifetime #self_ty }
+            }
+            (Some((_, None)), Some(_)) => {
+                let lifetime = syn::Lifetime::new("'_optarg_self", Span::call_site());
+                additional_lifetime = vec![lifetime.clone()];
+                new_receiver = vec![syn::parse_quote! { &#lifetime mut self }];
+                syn::parse_quote! { &#lifetime mut #self_ty }
+            }
+            (Some((_, Some(lifetime))), Some(_)) => {
+                new_receiver = vec![syn::parse_quote! { &#lifetime mut self }];
+                syn::parse_quote! { &#lifetime mut #self_ty }
+            }
+            (None, _) => {
+                syn::parse_quote! { #self_ty }
+            }
+        };
+        (vec![self_ident], vec![receiver_ty])
+    } else {
+        (vec![], vec![])
+    };
+    (
+        new_receiver,
+        receiver_ident,
+        receiver_ty,
+        additional_lifetime,
+        args,
+    )
 }
