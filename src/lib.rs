@@ -12,6 +12,7 @@ const ATTR_NAME_METHOD: &str = "optarg_method";
 
 const ERR_MSG_EMPTY_ARG: &str = "no arguments";
 const ERR_MSG_TRAIT_IMPL: &str = "impl for traits is not supported";
+const ERR_IMPLICIT_LIFETIME: &str = "explicit lifetime is neeeded";
 
 #[proc_macro_attribute]
 pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -158,7 +159,9 @@ fn optarg_method(
     let return_type = &input.sig.output;
     let return_marker_type = return_marker_type(&return_type);
     let method_name = &input.sig.ident;
-    let (original_receiver, receiver_ident, receiver_ty, additional_lifetime, args) =
+    let merged_generics = merge_generics(&input.sig.generics);
+    let (impl_generics, ty_generics, where_clause) = merged_generics.split_for_impl();
+    let (original_receiver, receiver_ident, receiver_ty, args) =
         separate_receiver(&input.sig, self_ty);
 
     let args = parse_typed_args(&args);
@@ -178,13 +181,13 @@ fn optarg_method(
     let inner_method_block = &input.block;
 
     let inner_method: syn::ImplItem = syn::parse_quote! {
-        fn #inner_method_ident<#(#additional_lifetime,)*>(
+        fn #inner_method_ident #ty_generics (
             #(#original_receiver,)*
-            #(#arg_name: #arg_ty,)*) #return_type #inner_method_block
+            #(#arg_name: #arg_ty,)*) #return_type #where_clause #inner_method_block
     };
 
     let item_struct: syn::ItemStruct = syn::parse_quote! {
-        #vis struct #builder_struct_name <#(#additional_lifetime,)*> {
+        #vis struct #builder_struct_name #ty_generics {
             #(#receiver_ident: #receiver_ty,)*
             #(#req_ident: #req_ty,)*
             #(#opt_ident: core::option::Option<#opt_ty>,)*
@@ -194,10 +197,10 @@ fn optarg_method(
 
     let impl_item: syn::ImplItem = syn::parse_quote! {
         #(#other_attrs)*
-        #vis fn #method_name<#(#additional_lifetime,)*> (
+        #vis fn #method_name #ty_generics (
             #(#original_receiver,)*
             #(#req_ident: #req_ty,)*
-        ) -> #builder_struct_name<#(#additional_lifetime,)*> {
+        ) -> #builder_struct_name #ty_generics {
             #builder_struct_name {
                 #insert_self,
                 #(
@@ -212,7 +215,7 @@ fn optarg_method(
     };
 
     let struct_impl: syn::ItemImpl = syn::parse_quote! {
-        impl<#(#additional_lifetime,)*> #builder_struct_name<#(#additional_lifetime,)*> {
+        impl #impl_generics #builder_struct_name #ty_generics {
             #(
                 #vis fn #opt_ident(mut self, value: #opt_ty) -> Self {
                     self.#opt_ident = Some(value);
@@ -220,7 +223,7 @@ fn optarg_method(
                 }
             )*
 
-            #vis fn #finish_method_name(self) #return_type {
+            #vis fn #finish_method_name(self) #where_clause #return_type {
                 #(
                     let #receiver_ident: #receiver_ty = self.#receiver_ident;
                 )*
@@ -380,8 +383,7 @@ fn separete_attrs<'a>(
     }
     (optarg_attrs, other_attrs)
 }
-
-// Returns (receiver, reciever ident, receiver type, additional lifetime, other args)
+// Returns (receiver, reciever ident, receiver type, other args)
 fn separate_receiver<'a>(
     sig: &'a syn::Signature,
     self_ty: &syn::Type,
@@ -389,7 +391,6 @@ fn separate_receiver<'a>(
     Vec<syn::Receiver>,
     Vec<syn::Ident>,
     Vec<syn::Type>,
-    Vec<syn::Lifetime>,
     Vec<&'a syn::PatType>,
 ) {
     let mut receiver = None;
@@ -405,32 +406,30 @@ fn separate_receiver<'a>(
             }
         }
     }
-    let mut additional_lifetime: Vec<syn::Lifetime> = vec![];
     let mut new_receiver: Vec<syn::Receiver> = vec![];
     let (receiver_ident, receiver_ty) = if let Some(receiver) = receiver {
         let self_ident = syn::Ident::new("_optarg_self", Span::call_site());
         let receiver_ty: syn::Type = match (&receiver.reference, &receiver.mutability) {
             (Some((_, None)), None) => {
-                let lifetime = syn::Lifetime::new("'_optarg_self", Span::call_site());
-                additional_lifetime = vec![lifetime.clone()];
-                new_receiver = vec![syn::parse_quote! { &#lifetime self }];
-                syn::parse_quote! { &#lifetime #self_ty }
+                panic!(ERR_IMPLICIT_LIFETIME);
             }
             (Some((_, Some(lifetime))), None) => {
                 new_receiver = vec![syn::parse_quote! { &#lifetime self }];
                 syn::parse_quote! { &#lifetime #self_ty }
             }
             (Some((_, None)), Some(_)) => {
-                let lifetime = syn::Lifetime::new("'_optarg_self", Span::call_site());
-                additional_lifetime = vec![lifetime.clone()];
-                new_receiver = vec![syn::parse_quote! { &#lifetime mut self }];
-                syn::parse_quote! { &#lifetime mut #self_ty }
+                panic!(ERR_IMPLICIT_LIFETIME);
             }
             (Some((_, Some(lifetime))), Some(_)) => {
                 new_receiver = vec![syn::parse_quote! { &#lifetime mut self }];
                 syn::parse_quote! { &#lifetime mut #self_ty }
             }
-            (None, _) => {
+            (None, is_mut) => {
+                if is_mut.is_some() {
+                    new_receiver = vec![syn::parse_quote! { mut self }];
+                } else {
+                    new_receiver = vec![syn::parse_quote! { self }];
+                }
                 syn::parse_quote! { #self_ty }
             }
         };
@@ -438,11 +437,9 @@ fn separate_receiver<'a>(
     } else {
         (vec![], vec![])
     };
-    (
-        new_receiver,
-        receiver_ident,
-        receiver_ty,
-        additional_lifetime,
-        args,
-    )
+    (new_receiver, receiver_ident, receiver_ty, args)
+}
+
+fn merge_generics(func_generics: &syn::Generics) -> syn::Generics {
+    func_generics.clone()
 }
