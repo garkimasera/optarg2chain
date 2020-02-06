@@ -34,3 +34,21 @@ fn integer_test() {
     assert_eq!(integer.0, 100);
     assert_eq!(integer.add_and_take().a(27).exec(), Integer(127));
 }
+
+#[derive(PartialEq, Debug)]
+struct Wrap<T>(T);
+
+#[optarg_impl]
+impl<T: core::ops::Add<Output = T> + Default + Copy> Wrap<T> {
+    #[optarg_method(WrapAddBuilder, exec)]
+    fn add<'a>(&'a self, #[optarg_default] a: T) -> T {
+        self.0 + a
+    }
+}
+
+#[test]
+fn wrap_test() {
+    let wrapped_int = Wrap(5i32);
+    assert_eq!(wrapped_int.add().exec(), 5);
+    assert_eq!(wrapped_int.add().a(4).exec(), 9);
+}

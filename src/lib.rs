@@ -102,6 +102,7 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn optarg_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut item: syn::ItemImpl = syn::parse(item).unwrap();
     assert!(item.trait_.is_none(), ERR_MSG_TRAIT_IMPL);
+    let generics = &item.generics;
 
     let self_ty = &item.self_ty;
 
@@ -126,7 +127,7 @@ pub fn optarg_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
         match item {
             syn::ImplItem::Method(method) => {
                 let (mut optarg_method, optarg_struct, optarg_struct_impl) =
-                    optarg_method(method, self_ty);
+                    optarg_method(method, generics, self_ty);
                 optarg_methods.append(&mut optarg_method);
                 optarg_structs.push(optarg_struct);
                 optarg_struct_impls.push(optarg_struct_impl);
@@ -148,6 +149,7 @@ pub fn optarg_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 fn optarg_method(
     input: syn::ImplItemMethod,
+    impl_original_generics: &syn::Generics,
     self_ty: &syn::Type,
 ) -> (Vec<syn::ImplItem>, syn::ItemStruct, syn::ItemImpl) {
     let (optarg_attrs, other_attrs) = separete_attrs(&input.attrs);
@@ -159,7 +161,8 @@ fn optarg_method(
     let return_type = &input.sig.output;
     let return_marker_type = return_marker_type(&return_type);
     let method_name = &input.sig.ident;
-    let merged_generics = merge_generics(&input.sig.generics);
+    let (_, method_ty_generics, _) = input.sig.generics.split_for_impl();
+    let merged_generics = merge_generics(impl_original_generics, &input.sig.generics);
     let (impl_generics, ty_generics, where_clause) = merged_generics.split_for_impl();
     let (original_receiver, receiver_ident, receiver_ty, args) =
         separate_receiver(&input.sig, self_ty);
@@ -181,7 +184,7 @@ fn optarg_method(
     let inner_method_block = &input.block;
 
     let inner_method: syn::ImplItem = syn::parse_quote! {
-        fn #inner_method_ident #ty_generics (
+        fn #inner_method_ident #method_ty_generics (
             #(#original_receiver,)*
             #(#arg_name: #arg_ty,)*) #return_type #where_clause #inner_method_block
     };
@@ -197,7 +200,7 @@ fn optarg_method(
 
     let impl_item: syn::ImplItem = syn::parse_quote! {
         #(#other_attrs)*
-        #vis fn #method_name #ty_generics (
+        #vis fn #method_name #method_ty_generics (
             #(#original_receiver,)*
             #(#req_ident: #req_ty,)*
         ) -> #builder_struct_name #ty_generics {
@@ -213,6 +216,8 @@ fn optarg_method(
             }
         }
     };
+
+    let self_ty_no_generics = erase_generics(self_ty);
 
     let struct_impl: syn::ItemImpl = syn::parse_quote! {
         impl #impl_generics #builder_struct_name #ty_generics {
@@ -233,7 +238,7 @@ fn optarg_method(
                 #(
                     let #opt_ident: #opt_ty = self.#opt_ident.unwrap_or_else(|| { #opt_default_value });
                 )*
-                #self_ty::#inner_method_ident( #(#receiver_ident,)* #(#arg_name, )* )
+                #self_ty_no_generics::#inner_method_ident( #(#receiver_ident,)* #(#arg_name, )* )
             }
         }
     };
@@ -440,6 +445,37 @@ fn separate_receiver<'a>(
     (new_receiver, receiver_ident, receiver_ty, args)
 }
 
-fn merge_generics(func_generics: &syn::Generics) -> syn::Generics {
-    func_generics.clone()
+fn merge_generics(
+    impl_original_generics: &syn::Generics,
+    func_generics: &syn::Generics,
+) -> syn::Generics {
+    let mut g = syn::Generics::default();
+
+    for l in func_generics.lifetimes() {
+        g.params.push(syn::GenericParam::Lifetime(l.clone()));
+    }
+    for l in impl_original_generics.lifetimes() {
+        g.params.push(syn::GenericParam::Lifetime(l.clone()));
+    }
+    for t in func_generics.type_params() {
+        g.params.push(syn::GenericParam::Type(t.clone()));
+    }
+    for t in impl_original_generics.type_params() {
+        g.params.push(syn::GenericParam::Type(t.clone()));
+    }
+
+    g
+}
+
+fn erase_generics(ty: &syn::Type) -> syn::Type {
+    let mut ty = ty.clone();
+    match ty {
+        syn::Type::Path(ref mut path) => {
+            for s in &mut path.path.segments {
+                s.arguments = syn::PathArguments::None;
+            }
+            ty
+        }
+        _ => ty,
+    }
 }
