@@ -1,4 +1,4 @@
-# optarg2chain
+# optarg2chain ![Rust](https://github.com/garkimasera/optarg2chain/workflows/Rust/badge.svg)
 Converts optional arguments to chaining style
 
 Rust doesn't have optional or named arguments. This crate provide macros to convert optional arguments given by attributes to method chaining style instead.
@@ -61,7 +61,7 @@ fn join_strings(a: String) -> JoinStringBuilder {
 }
 ```
 
-`optarg_fn` generates builder struct, optional argument setter and terminal methods. You can use above `join_strings` like this:
+`optarg_fn` generates builder struct, optional argument setter and terminal methods. You can use above `join_strings` as below:
 
 ```Rust
 assert_eq!(join_strings("aaa".to_owned()).exec(), "aaaccc");
