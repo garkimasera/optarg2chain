@@ -1,6 +1,6 @@
 use optarg2chain::*;
 
-#[optarg_func(JoinStringBuilder, exec)]
+#[optarg_fn(JoinStringBuilder, exec)]
 fn join_strings(
     mut a: String,
     #[optarg_default] b: String,
@@ -23,7 +23,7 @@ fn join_strings_test() {
     );
 }
 
-#[optarg_func(JoinVecBuilder, exec)]
+#[optarg_fn(JoinVecBuilder, exec)]
 fn join_vecs<T>(
     mut a: Vec<T>,
     #[optarg_default] mut b: Vec<T>,
@@ -49,7 +49,7 @@ fn join_vec_test() {
     );
 }
 
-#[optarg_func(ConvertBuilder, exec)]
+#[optarg_fn(ConvertBuilder, exec)]
 fn add_and_convert<T: Default, R>(a: T, #[optarg_default] b: T) -> R
 where
     T: core::ops::Add<Output = T>,

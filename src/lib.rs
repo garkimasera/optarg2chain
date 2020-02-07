@@ -15,7 +15,7 @@ const ERR_MSG_TRAIT_IMPL: &str = "impl for traits is not supported";
 const ERR_IMPLICIT_LIFETIME: &str = "explicit lifetime is neeeded";
 
 #[proc_macro_attribute]
-pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
     let FnAttr {
         builder_struct_name,
         finish_method_name,
