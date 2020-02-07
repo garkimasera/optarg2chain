@@ -18,7 +18,7 @@ const ERR_IMPLICIT_LIFETIME: &str = "explicit lifetime is neeeded";
 pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
     let FnAttr {
         builder_struct_name,
-        finish_method_name,
+        terminal_method_name,
     } = syn::parse_macro_input!(attr as FnAttr);
     let item: syn::ItemFn = syn::parse(item).unwrap();
     let return_type = &item.sig.output;
@@ -62,7 +62,7 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             )*
 
-            #vis fn #finish_method_name(self) #return_type #where_clause {
+            #vis fn #terminal_method_name(self) #return_type #where_clause {
                 #inner_func
 
                 #(
@@ -157,7 +157,7 @@ fn optarg_method(
     let (optarg_attrs, other_attrs) = separete_attrs(&input.attrs);
     let FnAttr {
         builder_struct_name,
-        finish_method_name,
+        terminal_method_name,
     } = optarg_attrs[0].parse_args().unwrap();
     let vis = input.vis;
     let return_type = &input.sig.output;
@@ -230,7 +230,7 @@ fn optarg_method(
                 }
             )*
 
-            #vis fn #finish_method_name(self) #return_type #where_clause {
+            #vis fn #terminal_method_name(self) #return_type #where_clause {
                 #(
                     let #receiver_ident: #receiver_ty = self.#receiver_ident;
                 )*
@@ -256,17 +256,17 @@ struct Arg<'a> {
 
 struct FnAttr {
     builder_struct_name: syn::Ident,
-    finish_method_name: syn::Ident,
+    terminal_method_name: syn::Ident,
 }
 
 impl Parse for FnAttr {
     fn parse(input: ParseStream) -> syn::parse::Result<Self> {
         let builder_struct_name: syn::Ident = input.parse().unwrap();
         input.parse::<syn::Token![,]>().unwrap();
-        let finish_method_name: syn::Ident = input.parse().unwrap();
+        let terminal_method_name: syn::Ident = input.parse().unwrap();
         Ok(FnAttr {
             builder_struct_name,
-            finish_method_name,
+            terminal_method_name,
         })
     }
 }
