@@ -41,7 +41,10 @@ struct Wrap<T>(T);
 #[optarg_impl]
 impl<T: core::ops::Add<Output = T> + Default> Wrap<T> {
     #[optarg_method(WrapAddBuilder, exec)]
-    fn add<'a>(&'a self, #[optarg_default] a: T) -> T where T: Copy {
+    fn add<'a>(&'a self, #[optarg_default] a: T) -> T
+    where
+        T: Copy,
+    {
         self.0 + a
     }
 }
@@ -51,4 +54,35 @@ fn wrap_test() {
     let wrapped_int = Wrap(5i32);
     assert_eq!(wrapped_int.add().exec(), 5);
     assert_eq!(wrapped_int.add().a(4).exec(), 9);
+}
+
+#[derive(Clone)]
+struct MyVec<T> {
+    data: Vec<T>,
+}
+
+#[optarg_impl]
+impl<T: Clone> MyVec<T> {
+    #[optarg_method(Ref3Builder, get)]
+    fn clone_or<'a>(&'a self, #[optarg_default] other: Option<Self>) -> Self {
+        other.unwrap_or(self.clone())
+    }
+}
+
+#[test]
+fn myvec_test() {
+    let myvec = MyVec {
+        data: vec![2, 4, 6],
+    };
+    assert_eq!(myvec.clone_or().get().data, [2, 4, 6]);
+    assert_eq!(
+        myvec
+            .clone_or()
+            .other(Some(MyVec {
+                data: vec![1, 3, 5]
+            }))
+            .get()
+            .data,
+        [1, 3, 5]
+    );
 }

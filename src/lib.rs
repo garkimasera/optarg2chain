@@ -3,6 +3,7 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
+use syn::fold::Fold;
 use syn::parse::{Parse, ParseStream};
 
 const ATTR_PREFIX: &str = "optarg";
@@ -160,7 +161,8 @@ fn optarg_method(
         terminal_method_name,
     } = optarg_attrs[0].parse_args().unwrap();
     let vis = input.vis;
-    let return_type = &input.sig.output;
+    let mut self_replace = SelfReplace(self_ty);
+    let return_type = self_replace.fold_return_type(input.sig.output.clone());
     let return_marker_type = return_marker_type(&return_type);
     let method_name = &input.sig.ident;
     let (_, method_ty_generics, _) = input.sig.generics.split_for_impl();
@@ -169,6 +171,11 @@ fn optarg_method(
     let (original_receiver, receiver_ident, receiver_ty, args) =
         separate_receiver(&input.sig, self_ty);
 
+    let replaced_args: Vec<syn::PatType> = args
+        .iter()
+        .map(|pt| self_replace.fold_pat_type((*pt).clone()))
+        .collect();
+    let args: Vec<&syn::PatType> = replaced_args.iter().map(|pt| pt).collect();
     let args = parse_typed_args(&args);
     let (arg_name, arg_ty, req_ident, req_ty, opt_ident, opt_ty, opt_default_value) =
         separate_args(&args);
@@ -469,10 +476,10 @@ fn merge_generics(
         &impl_original_generics.where_clause,
         &func_generics.where_clause,
     ]
-        .iter()
-        .flat_map(|opt| opt.iter())
-        .flat_map(|w| w.predicates.iter())
-        .collect();
+    .iter()
+    .flat_map(|opt| opt.iter())
+    .flat_map(|w| w.predicates.iter())
+    .collect();
     if !w.is_empty() {
         let where_clause: syn::WhereClause = syn::parse_quote! {
             where #(#w),*
@@ -493,5 +500,26 @@ fn erase_generics(ty: &syn::Type) -> syn::Type {
             ty
         }
         _ => ty,
+    }
+}
+
+struct SelfReplace<'a>(&'a syn::Type);
+
+impl<'a> Fold for SelfReplace<'a> {
+    fn fold_type(&mut self, ty: syn::Type) -> syn::Type {
+        match ty {
+            syn::Type::Path(syn::TypePath {
+                qself: None,
+                ref path,
+            }) => {
+                if let Some(ident) = path.get_ident() {
+                    if ident.to_string() == "Self" {
+                        return self.0.clone();
+                    }
+                }
+            }
+            _ => (),
+        }
+        syn::fold::fold_type(self, ty)
     }
 }
