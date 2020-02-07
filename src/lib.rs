@@ -230,7 +230,7 @@ fn optarg_method(
                 }
             )*
 
-            #vis fn #finish_method_name(self) #where_clause #return_type {
+            #vis fn #finish_method_name(self) #return_type #where_clause {
                 #(
                     let #receiver_ident: #receiver_ty = self.#receiver_ident;
                 )*
@@ -464,6 +464,20 @@ fn merge_generics(
     }
     for t in impl_original_generics.type_params() {
         g.params.push(syn::GenericParam::Type(t.clone()));
+    }
+    let w: Vec<&syn::WherePredicate> = [
+        &impl_original_generics.where_clause,
+        &func_generics.where_clause,
+    ]
+        .iter()
+        .flat_map(|opt| opt.iter())
+        .flat_map(|w| w.predicates.iter())
+        .collect();
+    if !w.is_empty() {
+        let where_clause: syn::WhereClause = syn::parse_quote! {
+            where #(#w),*
+        };
+        g.where_clause = Some(where_clause);
     }
 
     g

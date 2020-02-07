@@ -39,9 +39,9 @@ fn integer_test() {
 struct Wrap<T>(T);
 
 #[optarg_impl]
-impl<T: core::ops::Add<Output = T> + Default + Copy> Wrap<T> {
+impl<T: core::ops::Add<Output = T> + Default> Wrap<T> {
     #[optarg_method(WrapAddBuilder, exec)]
-    fn add<'a>(&'a self, #[optarg_default] a: T) -> T {
+    fn add<'a>(&'a self, #[optarg_default] a: T) -> T where T: Copy {
         self.0 + a
     }
 }
