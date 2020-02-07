@@ -63,7 +63,7 @@ struct MyVec<T> {
 
 #[optarg_impl]
 impl<T: Clone> MyVec<T> {
-    #[optarg_method(Ref3Builder, get)]
+    #[optarg_method(CloneOr, get)]
     fn clone_or<'a>(&'a self, #[optarg_default] other: Option<Self>) -> Self {
         other.unwrap_or(self.clone())
     }
@@ -78,9 +78,9 @@ fn myvec_test() {
     assert_eq!(
         myvec
             .clone_or()
-            .other(Some(MyVec {
+            .other(MyVec {
                 data: vec![1, 3, 5]
-            }))
+            })
             .get()
             .data,
         [1, 3, 5]

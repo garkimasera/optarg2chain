@@ -57,7 +57,9 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         impl #impl_generics #builder_struct_name #ty_generics {
             #(
-                #vis fn #opt_ident(mut self, value: #opt_ty) -> Self {
+                #vis fn #opt_ident<_OPTARG_VALUE: core::convert::Into<#opt_ty>>(
+                    mut self, value: _OPTARG_VALUE) -> Self {
+                    let value = <_OPTARG_VALUE as core::convert::Into<#opt_ty>>::into(value);
                     self.#opt_ident = Some(value);
                     self
                 }
@@ -231,7 +233,9 @@ fn optarg_method(
     let struct_impl: syn::ItemImpl = syn::parse_quote! {
         impl #impl_generics #builder_struct_name #ty_generics {
             #(
-                #vis fn #opt_ident(mut self, value: #opt_ty) -> Self {
+                #vis fn #opt_ident<_OPTARG_VALUE: core::convert::Into<#opt_ty>>(
+                    mut self, value: _OPTARG_VALUE) -> Self {
+                    let value = <_OPTARG_VALUE as core::convert::Into<#opt_ty>>::into(value);
                     self.#opt_ident = Some(value);
                     self
                 }
