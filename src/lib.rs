@@ -43,7 +43,9 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut inner_func = item.clone();
     erase_optarg_attr(&mut inner_func.sig);
     inner_func.vis = syn::Visibility::Inherited;
-    let func_name = &inner_func.sig.ident;
+    let func_name = inner_func.sig.ident.clone();
+    let inner_func_name = syn::Ident::new("_optarg_inner_func", Span::call_site());
+    inner_func.sig.ident = inner_func_name.clone();
 
     let expanded = quote! {
         #vis struct #builder_struct_name #ty_generics {
@@ -69,7 +71,7 @@ pub fn optarg_func(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #(
                     let #opt_ident: #opt_ty = self.#opt_ident.unwrap_or_else(|| { #opt_default_value });
                 )*
-                #func_name (
+                #inner_func_name (
                     #(
                         #arg_name,
                     )*
