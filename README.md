@@ -30,11 +30,13 @@ struct JoinStringBuilder {
     c: core::option::Option<String>,
 }
 impl JoinStringBuilder {
-    fn b(mut self, value: String) -> Self {
+    fn b<_OPTARG_VALUE: core::convert::Into<String>>(mut self, value: _OPTARG_VALUE) -> Self {
+        let value = <_OPTARG_VALUE as core::convert::Into<String>>::into(value);
         self.b = Some(value);
         self
     }
-    fn c(mut self, value: String) -> Self {
+    fn c<_OPTARG_VALUE: core::convert::Into<String>>(mut self, value: _OPTARG_VALUE) -> Self {
+        let value = <_OPTARG_VALUE as core::convert::Into<String>>::into(value);
         self.c = Some(value);
         self
     }
@@ -72,6 +74,30 @@ assert_eq!(
         .exec(),
     "xxxyyyzzz"
 );
+```
+
+`optarg_impl` and `optarg_method` attributes are prepared for methods.
+
+```
+use optarg2chain::optarg_impl;
+
+struct Integer(i32);
+
+#[optarg_impl]
+impl Integer {
+    #[optarg_method(AddBuilder, exec)]
+    pub fn add<'a>(&'a self, #[optarg(20)] a: i32) -> i32 {
+        self.0 + a
+    }
+}
+```
+
+You can use `Integer::add` as below:
+
+```
+let integer = Integer(22);
+assert_eq!(integer.add().a(11).exec(), 33);
+assert_eq!(integer.add().exec(), 42);
 ```
 
 ## License
