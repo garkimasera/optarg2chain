@@ -193,9 +193,9 @@ fn optarg_method(
         separate_args(&args);
 
     let insert_self = if receiver_ident.is_empty() {
-        None
+        vec![]
     } else {
-        Some(quote! { #(#receiver_ident: self)* })
+        vec![quote! { #(#receiver_ident: self)* }]
     };
 
     let inner_method_ident = syn::Ident::new(
@@ -232,7 +232,7 @@ fn optarg_method(
             #(#req_ident: #req_ty,)*
         ) -> #builder_struct_name #ty_generics {
             #builder_struct_name {
-                #insert_self,
+                #(#insert_self,)*
                 #(
                     #req_ident,
                 )*
