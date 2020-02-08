@@ -1,5 +1,7 @@
 extern crate proc_macro;
 
+mod doc;
+
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
@@ -47,8 +49,14 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
     let func_name = inner_func.sig.ident.clone();
     let inner_func_name = syn::Ident::new("_optarg_inner_func", Span::call_site());
     inner_func.sig.ident = inner_func_name.clone();
+    let doc::DocAttrs {
+        doc_builder_struct,
+        doc_setter,
+        doc_terminal_method,
+    } = doc::generate_doc(&func_name, &opt_ident);
 
     let expanded = quote! {
+        #doc_builder_struct
         #vis struct #builder_struct_name #ty_generics {
             #(#req_ident: #req_ty,)*
             #(#opt_ident: core::option::Option<#opt_ty>,)*
@@ -57,6 +65,7 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         impl #impl_generics #builder_struct_name #ty_generics {
             #(
+                #doc_setter
                 #vis fn #opt_ident<_OPTARG_VALUE: core::convert::Into<#opt_ty>>(
                     mut self, value: _OPTARG_VALUE) -> Self {
                     let value = <_OPTARG_VALUE as core::convert::Into<#opt_ty>>::into(value);
@@ -65,6 +74,7 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             )*
 
+            #doc_terminal_method
             #vis fn #terminal_method_name(self) #return_type #where_clause {
                 #inner_func
 
@@ -157,7 +167,7 @@ fn optarg_method(
     impl_original_generics: &syn::Generics,
     self_ty: &syn::Type,
 ) -> (Vec<syn::ImplItem>, syn::ItemStruct, syn::ItemImpl) {
-    let (optarg_attrs, other_attrs) = separete_attrs(&input.attrs);
+    let (optarg_attrs, other_attrs) = separate_attrs(&input.attrs);
     let FnAttr {
         builder_struct_name,
         terminal_method_name,
@@ -193,6 +203,11 @@ fn optarg_method(
         method_name.span(),
     );
     let inner_method_block = &input.block;
+    let doc::DocAttrs {
+        doc_builder_struct,
+        doc_setter,
+        doc_terminal_method,
+    } = doc::generate_doc(&method_name, &opt_ident);
 
     let inner_method: syn::ImplItem = syn::parse_quote! {
         fn #inner_method_ident #method_ty_generics (
@@ -201,6 +216,7 @@ fn optarg_method(
     };
 
     let item_struct: syn::ItemStruct = syn::parse_quote! {
+        #doc_builder_struct
         #vis struct #builder_struct_name #ty_generics {
             #(#receiver_ident: #receiver_ty,)*
             #(#req_ident: #req_ty,)*
@@ -233,6 +249,7 @@ fn optarg_method(
     let struct_impl: syn::ItemImpl = syn::parse_quote! {
         impl #impl_generics #builder_struct_name #ty_generics {
             #(
+                #doc_setter
                 #vis fn #opt_ident<_OPTARG_VALUE: core::convert::Into<#opt_ty>>(
                     mut self, value: _OPTARG_VALUE) -> Self {
                     let value = <_OPTARG_VALUE as core::convert::Into<#opt_ty>>::into(value);
@@ -241,6 +258,7 @@ fn optarg_method(
                 }
             )*
 
+            #doc_terminal_method
             #vis fn #terminal_method_name(self) #return_type #where_clause {
                 #(
                     let #receiver_ident: #receiver_ty = self.#receiver_ident;
@@ -384,7 +402,7 @@ fn return_marker_type(return_type: &syn::ReturnType) -> syn::Type {
     }
 }
 
-fn separete_attrs<'a>(
+fn separate_attrs<'a>(
     attrs: &'a [syn::Attribute],
 ) -> (Vec<&'a syn::Attribute>, Vec<&'a syn::Attribute>) {
     let mut optarg_attrs = vec![];
