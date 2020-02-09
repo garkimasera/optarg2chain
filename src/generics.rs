@@ -13,7 +13,7 @@ pub fn merge_generics(
     let method_generics: &syn::Generics = &method_sig.generics;
 
     for l in impl_original_generics.lifetimes() {
-        if !filter.has_lifetime(&l.lifetime) {
+        if !filter.has_receiver && !filter.has_lifetime(&l.lifetime) {
             continue;
         }
         g.params.push(syn::GenericParam::Lifetime(l.clone()));
@@ -22,7 +22,7 @@ pub fn merge_generics(
         g.params.push(syn::GenericParam::Lifetime(l.clone()));
     }
     for t in impl_original_generics.type_params() {
-        if !filter.has_type(&t.ident) {
+        if !filter.has_receiver && !filter.has_type(&t.ident) {
             continue;
         }
         g.params.push(syn::GenericParam::Type(t.clone()));
@@ -78,6 +78,7 @@ impl<'a> Fold for SelfReplace<'a> {
 struct TypeFilter {
     types: Vec<syn::Ident>,
     lifetimes: Vec<syn::Lifetime>,
+    has_receiver: bool,
 }
 
 #[derive(Default, Debug)]
@@ -121,6 +122,11 @@ impl Fold for TypeFilterBuilder {
             return ty;
         }
         syn::fold::fold_type(self, ty)
+    }
+
+    fn fold_receiver(&mut self, receiver: syn::Receiver) -> syn::Receiver {
+        self.0.has_receiver = true;
+        receiver
     }
 }
 
