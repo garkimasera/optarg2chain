@@ -1,6 +1,6 @@
 //! Converts optional arguments to chaining style.
 //!
-//! Rust doesn't have optional or named arguments. This crate provide macros to convert optional arguments given by attributes to method chaining style instead.
+//! Rust doesn't have optional or named arguments. This crate provides macros to convert optional arguments given by attributes to method chaining style instead.
 //!
 //! # Function with optional arguments
 //!
@@ -93,14 +93,20 @@ use proc_macro2::Span;
 use quote::quote;
 use syn::fold::Fold;
 use syn::parse::{Parse, ParseStream};
+use syn::spanned::Spanned;
+use syn::{Error, Result};
 
 const ATTR_PREFIX: &str = "optarg";
 const ATTR_NAME_OPT_ARG: &str = "optarg";
 const ATTR_NAME_DEFAULT_ARG: &str = "optarg_default";
 const ATTR_NAME_METHOD: &str = "optarg_method";
 
-const ERR_MSG_TRAIT_IMPL: &str = "impl for traits is not supported";
-const ERR_IMPLICIT_LIFETIME: &str = "explicit lifetime is neeeded";
+const INNER_SELF_VAR: &str = "_optarg_self";
+
+const ERR_MSG_TRAIT_IMPL: &str = "(optarg2chain) impl for traits is not supported";
+const ERR_MSG_IMPLICIT_LIFETIME: &str = "(optarg2chain) explicit lifetime is neeeded";
+const ERR_MSG_UNDERSCORE_ARG: &str = "(optarg2chain) `_` cannot be used for this argument name";
+const ERR_MSG_UNUSABLE_PAT: &str = "(optarg2chain) unusable pattern found";
 
 /// Generates a builder struct and methods for the specified function.
 #[proc_macro_attribute]
@@ -109,7 +115,10 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
         builder_struct_name,
         terminal_method_name,
     } = syn::parse_macro_input!(attr as FnAttr);
-    let item: syn::ItemFn = syn::parse(item).unwrap();
+    let item: syn::ItemFn = syn::parse_macro_input!(item);
+    if let Err(e) = check_sig(&item.sig) {
+        return TokenStream::from(e.to_compile_error());
+    }
     let return_type = &item.sig.output;
     let return_marker_type = return_marker_type(&return_type);
     let args: Vec<&syn::PatType> = item
@@ -203,8 +212,11 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// Specify `#[optarg_method(BuilderStructName, terminal_method_name)]` to target methods for code generation.
 #[proc_macro_attribute]
 pub fn optarg_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut item: syn::ItemImpl = syn::parse(item).unwrap();
-    assert!(item.trait_.is_none(), ERR_MSG_TRAIT_IMPL);
+    let mut item: syn::ItemImpl = syn::parse_macro_input!(item);
+    if let Some(trait_) = &item.trait_ {
+        let err = Error::new(trait_.1.span(), ERR_MSG_TRAIT_IMPL);
+        return TokenStream::from(err.to_compile_error());
+    }
     let generics = &item.generics;
 
     let self_ty = &item.self_ty;
@@ -228,13 +240,16 @@ pub fn optarg_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     for item in optarg_items {
         match item {
-            syn::ImplItem::Method(method) => {
-                let (mut optarg_method, optarg_struct, optarg_struct_impl) =
-                    optarg_method(method, generics, self_ty);
-                optarg_methods.append(&mut optarg_method);
-                optarg_structs.push(optarg_struct);
-                optarg_struct_impls.push(optarg_struct_impl);
-            }
+            syn::ImplItem::Method(method) => match optarg_method(method, generics, self_ty) {
+                Ok((mut optarg_method, optarg_struct, optarg_struct_impl)) => {
+                    optarg_methods.append(&mut optarg_method);
+                    optarg_structs.push(optarg_struct);
+                    optarg_struct_impls.push(optarg_struct_impl);
+                }
+                Err(e) => {
+                    return TokenStream::from(e.to_compile_error());
+                }
+            },
             _ => unreachable!(),
         }
     }
@@ -254,7 +269,8 @@ fn optarg_method(
     input: syn::ImplItemMethod,
     impl_original_generics: &syn::Generics,
     self_ty: &syn::Type,
-) -> (Vec<syn::ImplItem>, syn::ItemStruct, syn::ItemImpl) {
+) -> Result<(Vec<syn::ImplItem>, syn::ItemStruct, syn::ItemImpl)> {
+    check_sig(&input.sig)?;
     let (optarg_attrs, other_attrs) = separate_attrs(&input.attrs);
     let FnAttr {
         builder_struct_name,
@@ -269,7 +285,7 @@ fn optarg_method(
     let merged_generics = merge_generics(impl_original_generics, &input.sig, self_ty);
     let (impl_generics, ty_generics, where_clause) = merged_generics.split_for_impl();
     let (original_receiver, receiver_ident, receiver_ty, args) =
-        separate_receiver(&input.sig, self_ty);
+        separate_receiver(&input.sig, self_ty)?;
 
     let replaced_args: Vec<syn::PatType> = args
         .iter()
@@ -362,7 +378,7 @@ fn optarg_method(
         }
     };
 
-    (vec![impl_item, inner_method], item_struct, struct_impl)
+    Ok((vec![impl_item, inner_method], item_struct, struct_impl))
 }
 
 struct Arg<'a> {
@@ -506,16 +522,17 @@ fn separate_attrs<'a>(
     }
     (optarg_attrs, other_attrs)
 }
+
 // Returns (receiver, reciever ident, receiver type, other args)
 fn separate_receiver<'a>(
     sig: &'a syn::Signature,
     self_ty: &syn::Type,
-) -> (
+) -> Result<(
     Vec<syn::FnArg>,
     Vec<syn::Ident>,
     Vec<syn::Type>,
     Vec<&'a syn::PatType>,
-) {
+)> {
     let mut receiver = None;
     let mut typed_self: Option<&syn::PatType> = None;
     let mut args = vec![];
@@ -540,17 +557,14 @@ fn separate_receiver<'a>(
     }
     let mut new_receiver: Vec<syn::FnArg> = vec![];
     let (receiver_ident, receiver_ty) = if let Some(receiver) = receiver {
-        let self_ident = syn::Ident::new("_optarg_self", Span::call_site());
+        let self_ident = syn::Ident::new(INNER_SELF_VAR, Span::call_site());
         let receiver_ty: syn::Type = match (&receiver.reference, &receiver.mutability) {
-            (Some((_, None)), None) => {
-                panic!(ERR_IMPLICIT_LIFETIME);
+            (Some((_, None)), _) => {
+                return Err(Error::new(receiver.span(), ERR_MSG_IMPLICIT_LIFETIME));
             }
             (Some((_, Some(lifetime))), None) => {
                 new_receiver = vec![syn::parse_quote! { &#lifetime self }];
                 syn::parse_quote! { &#lifetime #self_ty }
-            }
-            (Some((_, None)), Some(_)) => {
-                panic!(ERR_IMPLICIT_LIFETIME);
             }
             (Some((_, Some(lifetime))), Some(_)) => {
                 new_receiver = vec![syn::parse_quote! { &#lifetime mut self }];
@@ -567,7 +581,7 @@ fn separate_receiver<'a>(
         };
         (vec![self_ident], vec![receiver_ty])
     } else if let Some(pt) = typed_self {
-        let self_ident = syn::Ident::new("_optarg_self", Span::call_site());
+        let self_ident = syn::Ident::new(INNER_SELF_VAR, Span::call_site());
         let mut self_replace = SelfReplace(self_ty);
         let receiver_ty = self_replace.fold_type((*pt.ty).clone());
         new_receiver.push(syn::FnArg::from(pt.clone()));
@@ -575,5 +589,31 @@ fn separate_receiver<'a>(
     } else {
         (vec![], vec![])
     };
-    (new_receiver, receiver_ident, receiver_ty, args)
+    Ok((new_receiver, receiver_ident, receiver_ty, args))
+}
+
+// Checks function signature and returns error if exists
+fn check_sig(sig: &syn::Signature) -> Result<()> {
+    for arg in &sig.inputs {
+        match arg {
+            syn::FnArg::Typed(t) => match *t.pat {
+                syn::Pat::Ident(syn::PatIdent { ref ident, .. }) => {
+                    if ident == INNER_SELF_VAR {
+                        return Err(Error::new(
+                            ident.span(),
+                            format!("(optarg2chain) {} is reserved name", INNER_SELF_VAR),
+                        ));
+                    }
+                }
+                syn::Pat::Wild(ref w) => {
+                    return Err(Error::new(w.span(), ERR_MSG_UNDERSCORE_ARG));
+                }
+                _ => {
+                    return Err(Error::new(t.span(), ERR_MSG_UNUSABLE_PAT));
+                }
+            },
+            _ => (),
+        }
+    }
+    Ok(())
 }
