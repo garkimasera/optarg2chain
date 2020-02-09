@@ -90,7 +90,7 @@ fn myvec_test() {
     };
     assert_eq!(myvec.get_or(1).get(), 4);
     assert_eq!(myvec.get_or(10).get(), 0);
-    assert_eq!(myvec.get_or(42).other(42).get(), 42);
+    assert_eq!(myvec.get_or(10).other(42).get(), 42);
     assert_eq!(myvec.clone_or().get().data, [2, 4, 6]);
     assert_eq!(myvec.clone_or().get().data, [2, 4, 6]);
     assert_eq!(

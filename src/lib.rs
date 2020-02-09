@@ -48,7 +48,6 @@
 //! ```
 //! use optarg2chain::optarg_impl;
 //!
-//! #[derive(Clone)]
 //! struct MyVec<T> {
 //!     data: Vec<T>,
 //! }
@@ -64,7 +63,6 @@
 //! You can use this as below:
 //! ```
 //! # use optarg2chain::optarg_impl;
-//! # #[derive(Clone)]
 //! # struct MyVec<T> {
 //! #     data: Vec<T>,
 //! # }
@@ -79,7 +77,7 @@
 //! let myvec = MyVec { data: vec![2, 4, 6] };
 //! assert_eq!(myvec.get_or(1).get(), 4);
 //! assert_eq!(myvec.get_or(10).get(), 0);
-//! assert_eq!(myvec.get_or(42).other(42).get(), 42);
+//! assert_eq!(myvec.get_or(10).other(42).get(), 42);
 //! ```
 
 extern crate proc_macro;
