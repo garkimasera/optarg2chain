@@ -1,3 +1,87 @@
+//! Converts optional arguments to chaining style.
+//!
+//! Rust doesn't have optional or named arguments. This crate provide macros to convert optional arguments given by attributes to method chaining style instead.
+//!
+//! # Function with optional arguments
+//!
+//! Specify `optarg_fn` for a function with 2 arguments, the name of builder struct and terminal method. Use `#[optarg(expr)]` to give default value for an argument. `#[optarg_default]` gives default value by [`Default::default()`](https://doc.rust-lang.org/std/default/trait.Default.html).
+//! ```
+//! use optarg2chain::optarg_fn;
+//!
+//! // specify optarg_fn attribute with builder struct name and terminal method name
+//! #[optarg_fn(JoinStringBuilder, exec)]
+//! fn join_strings(
+//!     mut a: String,                         // Required argument, no default value
+//!     #[optarg_default] b: String,           // String::default() is the default value to b
+//!     #[optarg("ccc".to_owned())] c: String, // "ccc".to_owned() is the default value to c
+//! ) -> String {
+//!     a.push_str(&b);
+//!     a.push_str(&c);
+//!     a
+//! }
+//! ```
+//! You can use the generated function as below:
+//! ```
+//! # use optarg2chain::optarg_fn;
+//! # #[optarg_fn(JoinStringBuilder, exec)]
+//! # fn join_strings(
+//! #     mut a: String,                         // Required argument, no default value
+//! #     #[optarg_default] b: String,           // String::default() is the default value to b
+//! #     #[optarg("ccc".to_owned())] c: String, // "ccc".to_owned() is the default value to c
+//! # ) -> String {
+//! #     a.push_str(&b);
+//! #     a.push_str(&c);
+//! #     a
+//! # }
+//! assert_eq!(join_strings("aaa".to_owned()).exec(), "aaaccc"); // Use default values
+//! assert_eq!(
+//!     join_strings("xxx".to_owned())
+//!         .b("yyy".to_owned()) // Pass a value to `b` explicitly
+//!         .c("zzz".to_owned()) // Pass a value to `c` explicitly
+//!         .exec(),
+//!     "xxxyyyzzz"
+//! );
+//! ```
+//!
+//! # Method with optional arguments
+//! Use `#[optarg_impl]` and `#[optarg_method(BuilderStructName, terminal_method_name)]` for methods in `impl`
+//! ```
+//! use optarg2chain::optarg_impl;
+//!
+//! #[derive(Clone)]
+//! struct MyVec<T> {
+//!     data: Vec<T>,
+//! }
+//!
+//! #[optarg_impl]
+//! impl<T: Default + Copy> MyVec<T> {
+//!     #[optarg_method(MyVecGetOr, get)]
+//!     fn get_or<'a>(&'a self, i: usize, #[optarg_default] other: T) -> T {
+//!         self.data.get(i).copied().unwrap_or(other)
+//!     }
+//! }
+//! ```
+//! You can use this as below:
+//! ```
+//! # use optarg2chain::optarg_impl;
+//! # #[derive(Clone)]
+//! # struct MyVec<T> {
+//! #     data: Vec<T>,
+//! # }
+//! #
+//! # #[optarg_impl]
+//! # impl<T: Default + Copy> MyVec<T> {
+//! #     #[optarg_method(MyVecGetOr, get)]
+//! #     fn get_or<'a>(&'a self, i: usize, #[optarg_default] other: T) -> T {
+//! #         self.data.get(i).copied().unwrap_or(other)
+//! #     }
+//! # }
+//! let myvec = MyVec { data: vec![2, 4, 6] };
+//! assert_eq!(myvec.get_or(1).get(), 4);
+//! assert_eq!(myvec.get_or(10).get(), 0);
+//! assert_eq!(myvec.get_or(42).other(42).get(), 42);
+//! ```
+
 extern crate proc_macro;
 
 mod doc;
@@ -18,6 +102,7 @@ const ATTR_NAME_METHOD: &str = "optarg_method";
 const ERR_MSG_TRAIT_IMPL: &str = "impl for traits is not supported";
 const ERR_IMPLICIT_LIFETIME: &str = "explicit lifetime is neeeded";
 
+/// Generates a builder struct and methods for the specified function.
 #[proc_macro_attribute]
 pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
     let FnAttr {
@@ -114,6 +199,8 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
+/// This attribute is used with `optarg_method` attribute.
+/// Specify `#[optarg_method(BuilderStructName, terminal_method_name)]` to target methods for code generation.
 #[proc_macro_attribute]
 pub fn optarg_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut item: syn::ItemImpl = syn::parse(item).unwrap();

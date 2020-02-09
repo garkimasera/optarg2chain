@@ -68,6 +68,14 @@ struct MyVec<T> {
 }
 
 #[optarg_impl]
+impl<T: Default + Copy> MyVec<T> {
+    #[optarg_method(MyVecGetOr, get)]
+    fn get_or<'a>(&'a self, i: usize, #[optarg_default] other: T) -> T {
+        self.data.get(i).copied().unwrap_or(other)
+    }
+}
+
+#[optarg_impl]
 impl<T: Clone> MyVec<T> {
     #[optarg_method(CloneOr, get)]
     fn clone_or<'a>(&'a self, #[optarg_default] other: Option<Self>) -> Self {
@@ -80,6 +88,10 @@ fn myvec_test() {
     let myvec = MyVec {
         data: vec![2, 4, 6],
     };
+    assert_eq!(myvec.get_or(1).get(), 4);
+    assert_eq!(myvec.get_or(10).get(), 0);
+    assert_eq!(myvec.get_or(42).other(42).get(), 42);
+    assert_eq!(myvec.clone_or().get().data, [2, 4, 6]);
     assert_eq!(myvec.clone_or().get().data, [2, 4, 6]);
     assert_eq!(
         myvec
