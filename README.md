@@ -78,26 +78,30 @@ assert_eq!(
 
 `optarg_impl` and `optarg_method` attributes are prepared for methods.
 
-```
+```Rust
 use optarg2chain::optarg_impl;
 
-struct Integer(i32);
+#[derive(Clone)]
+struct MyVec<T> {
+    data: Vec<T>,
+}
 
 #[optarg_impl]
-impl Integer {
-    #[optarg_method(AddBuilder, exec)]
-    pub fn add<'a>(&'a self, #[optarg(20)] a: i32) -> i32 {
-        self.0 + a
+impl<T: Default + Copy> MyVec<T> {
+    #[optarg_method(MyVecGetOr, get)]
+    fn get_or<'a>(&'a self, i: usize, #[optarg_default] other: T) -> T { // Lifetimes need to be given explicitly
+        self.data.get(i).copied().unwrap_or(other)
     }
 }
 ```
 
-You can use `Integer::add` as below:
+You can use this as below:
 
-```
-let integer = Integer(22);
-assert_eq!(integer.add().a(11).exec(), 33);
-assert_eq!(integer.add().exec(), 42);
+```Rust
+let myvec = MyVec { data: vec![2, 4, 6] };
+assert_eq!(myvec.get_or(1).get(), 4);
+assert_eq!(myvec.get_or(10).get(), 0);
+assert_eq!(myvec.get_or(42).other(42).get(), 42);
 ```
 
 ## License
