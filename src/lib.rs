@@ -426,12 +426,13 @@ fn separate_receiver<'a>(
     sig: &'a syn::Signature,
     self_ty: &syn::Type,
 ) -> (
-    Vec<syn::Receiver>,
+    Vec<syn::FnArg>,
     Vec<syn::Ident>,
     Vec<syn::Type>,
     Vec<&'a syn::PatType>,
 ) {
     let mut receiver = None;
+    let mut typed_self: Option<&syn::PatType> = None;
     let mut args = vec![];
     for arg in &sig.inputs {
         match arg {
@@ -440,11 +441,19 @@ fn separate_receiver<'a>(
                 receiver = Some(r);
             }
             syn::FnArg::Typed(t) => {
+                if let syn::Pat::Ident(syn::PatIdent { ref ident, .. }) = *t.pat {
+                    if ident == "self" {
+                        // Handles typed self like `self: Box<Self>`
+                        assert!(typed_self.is_none());
+                        typed_self = Some(t);
+                        continue;
+                    }
+                }
                 args.push(t);
             }
         }
     }
-    let mut new_receiver: Vec<syn::Receiver> = vec![];
+    let mut new_receiver: Vec<syn::FnArg> = vec![];
     let (receiver_ident, receiver_ty) = if let Some(receiver) = receiver {
         let self_ident = syn::Ident::new("_optarg_self", Span::call_site());
         let receiver_ty: syn::Type = match (&receiver.reference, &receiver.mutability) {
@@ -471,6 +480,12 @@ fn separate_receiver<'a>(
                 syn::parse_quote! { #self_ty }
             }
         };
+        (vec![self_ident], vec![receiver_ty])
+    } else if let Some(pt) = typed_self {
+        let self_ident = syn::Ident::new("_optarg_self", Span::call_site());
+        let mut self_replace = SelfReplace(self_ty);
+        let receiver_ty = self_replace.fold_type((*pt.ty).clone());
+        new_receiver.push(syn::FnArg::from(pt.clone()));
         (vec![self_ident], vec![receiver_ty])
     } else {
         (vec![], vec![])

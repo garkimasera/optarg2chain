@@ -109,6 +109,11 @@ impl<'a, 'b> TwoStr<'a, 'b> {
     fn replace<'s, 'c>(&'s self, #[optarg("ccc")] b: &'c str) -> TwoStr<'a, 'c> {
         TwoStr { a: self.a, b }
     }
+
+    #[optarg_method(TakeBox, exec)]
+    fn take_box(self: Box<Self>, #[optarg(())] _dummy: ()) -> Box<Self> {
+        self
+    }
 }
 
 #[test]
@@ -126,4 +131,8 @@ fn twostr_test() {
         TwoStr { a: "aaa", b: "yyy" }
     );
     assert_eq!(two_str.replace().exec(), TwoStr { a: "aaa", b: "ccc" });
+    assert_eq!(
+        Box::new(two_str).take_box().exec(),
+        Box::new(TwoStr { a: "aaa", b: "bbb" })
+    );
 }
