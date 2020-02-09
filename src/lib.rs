@@ -180,7 +180,7 @@ fn optarg_method(
     let return_marker_type = return_marker_type(&return_type);
     let method_name = &input.sig.ident;
     let (_, method_ty_generics, _) = input.sig.generics.split_for_impl();
-    let merged_generics = merge_generics(impl_original_generics, &input.sig.generics);
+    let merged_generics = merge_generics(impl_original_generics, &input.sig, self_ty);
     let (impl_generics, ty_generics, where_clause) = merged_generics.split_for_impl();
     let (original_receiver, receiver_ident, receiver_ty, args) =
         separate_receiver(&input.sig, self_ty);
