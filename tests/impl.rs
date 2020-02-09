@@ -20,6 +20,11 @@ impl Integer {
         self.0 += a;
         self
     }
+
+    #[optarg_method(IntegerNew, build)]
+    fn new() -> Integer {
+        Integer(42)
+    }
 }
 
 #[test]
@@ -33,6 +38,7 @@ fn integer_test() {
     integer.assign().a(100).exec();
     assert_eq!(integer.0, 100);
     assert_eq!(integer.add_and_take().a(27).exec(), Integer(127));
+    assert_eq!(Integer::new().build(), Integer(42));
 }
 
 #[derive(PartialEq, Debug)]
@@ -111,7 +117,7 @@ impl<'a, 'b> TwoStr<'a, 'b> {
     }
 
     #[optarg_method(TakeBox, exec)]
-    fn take_box(self: Box<Self>, #[optarg(())] _dummy: ()) -> Box<Self> {
+    fn take_box(self: Box<Self>) -> Box<Self> {
         self
     }
 }

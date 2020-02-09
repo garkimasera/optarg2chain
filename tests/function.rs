@@ -63,3 +63,13 @@ fn add_and_convert_test() {
     assert_eq!(add_and_convert::<i8, i32>(1).b(2).exec(), 3i32);
     assert_eq!(add_and_convert::<u8, u32>(42).exec(), 42u32);
 }
+
+#[optarg_fn(EmptyArg, exec)]
+fn empty_arg() -> i32 {
+    42
+}
+
+#[test]
+fn empty_arg_test() {
+    assert_eq!(empty_arg().exec(), 42);
+}

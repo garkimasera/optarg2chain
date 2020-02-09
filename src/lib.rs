@@ -15,7 +15,6 @@ const ATTR_NAME_OPT_ARG: &str = "optarg";
 const ATTR_NAME_DEFAULT_ARG: &str = "optarg_default";
 const ATTR_NAME_METHOD: &str = "optarg_method";
 
-const ERR_MSG_EMPTY_ARG: &str = "no arguments";
 const ERR_MSG_TRAIT_IMPL: &str = "impl for traits is not supported";
 const ERR_IMPLICIT_LIFETIME: &str = "explicit lifetime is neeeded";
 
@@ -303,7 +302,6 @@ impl Parse for FnAttr {
 }
 
 fn parse_typed_args<'a>(args: &[&'a syn::PatType]) -> Vec<Arg<'a>> {
-    assert!(!args.is_empty(), ERR_MSG_EMPTY_ARG);
     args.iter()
         .map(|arg: &&syn::PatType| {
             let ident: &syn::Ident = match &*arg.pat {
