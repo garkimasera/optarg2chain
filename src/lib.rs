@@ -292,9 +292,9 @@ struct FnAttr {
 
 impl Parse for FnAttr {
     fn parse(input: ParseStream) -> syn::parse::Result<Self> {
-        let builder_struct_name: syn::Ident = input.parse().unwrap();
-        input.parse::<syn::Token![,]>().unwrap();
-        let terminal_method_name: syn::Ident = input.parse().unwrap();
+        let builder_struct_name: syn::Ident = input.parse()?;
+        input.parse::<syn::Token![,]>()?;
+        let terminal_method_name: syn::Ident = input.parse()?;
         Ok(FnAttr {
             builder_struct_name,
             terminal_method_name,
