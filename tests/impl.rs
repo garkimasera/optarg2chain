@@ -86,3 +86,44 @@ fn myvec_test() {
         [1, 3, 5]
     );
 }
+
+#[derive(PartialEq, Debug)]
+struct TwoStr<'a, 'b> {
+    a: &'a str,
+    b: &'b str,
+}
+
+#[optarg_impl]
+impl<'a, 'b> TwoStr<'a, 'b> {
+    #[optarg_method(TwoStrNew, build)]
+    fn new(a: &'a str, #[optarg("")] b: &'b str) -> TwoStr<'a, 'b> {
+        TwoStr { a, b }
+    }
+
+    #[optarg_method(TwoStrNewStatic, build)]
+    fn new_static(a: &'static str, #[optarg("")] b: &'b str) -> TwoStr<'static, 'b> {
+        TwoStr { a, b }
+    }
+
+    #[optarg_method(TwoStrReplace, exec)]
+    fn replace<'s, 'c>(&'s self, #[optarg("ccc")] b: &'c str) -> TwoStr<'a, 'c> {
+        TwoStr { a: self.a, b }
+    }
+}
+
+#[test]
+fn twostr_test() {
+    assert_eq!(TwoStr::new("x").b("y").build(), TwoStr { a: "x", b: "y" });
+    assert_eq!(TwoStr::new("x").build(), TwoStr { a: "x", b: "" });
+    assert_eq!(
+        TwoStr::new_static("x").b("y").build(),
+        TwoStr { a: "x", b: "y" }
+    );
+    assert_eq!(TwoStr::new_static("x").build(), TwoStr { a: "x", b: "" });
+    let two_str = TwoStr { a: "aaa", b: "bbb" };
+    assert_eq!(
+        two_str.replace().b("yyy").exec(),
+        TwoStr { a: "aaa", b: "yyy" }
+    );
+    assert_eq!(two_str.replace().exec(), TwoStr { a: "aaa", b: "ccc" });
+}
