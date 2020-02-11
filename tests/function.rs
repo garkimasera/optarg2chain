@@ -73,3 +73,14 @@ fn empty_arg() -> i32 {
 fn empty_arg_test() {
     assert_eq!(empty_arg().exec(), 42);
 }
+
+#[optarg_fn(Convert, get)]
+fn convert<T: Into<U> + Default, U>(#[optarg_default] target: T) -> U {
+    target.into()
+}
+
+#[test]
+fn convert_test() {
+    assert_eq!(convert::<i8, i32>().get(), 0i32);
+    assert_eq!(convert::<i8, i32>().target(42i8).get(), 42i32);
+}
