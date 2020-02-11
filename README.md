@@ -1,5 +1,5 @@
 # optarg2chain ![Rust](https://github.com/garkimasera/optarg2chain/workflows/Rust/badge.svg)
-Converts optional arguments to chaining style
+Converts optional arguments to chaining style.
 
 Rust doesn't have optional or named arguments. This crate provide macros to convert optional arguments given by attributes to method chaining style instead.
 
@@ -28,6 +28,7 @@ struct JoinStringBuilder {
     a: String,
     b: core::option::Option<String>,
     c: core::option::Option<String>,
+    _result_marker: core::marker::PhantomData<fn() -> String>,
 }
 impl JoinStringBuilder {
     fn b<_OPTARG_VALUE: core::convert::Into<String>>(mut self, value: _OPTARG_VALUE) -> Self {
@@ -59,6 +60,7 @@ fn join_strings(a: String) -> JoinStringBuilder {
         a,
         b: core::option::Option::None,
         c: core::option::Option::None,
+        _result_marker: core::marker::PhantomData,
     }
 }
 ```
@@ -103,6 +105,56 @@ assert_eq!(myvec.get_or(1).get(), 4);
 assert_eq!(myvec.get_or(10).get(), 0);
 assert_eq!(myvec.get_or(10).other(42).get(), 42);
 ```
+
+## Limitations
+
+### References in argument types need to be given explicitly
+
+Correct:
+
+```Rust
+#[optarg_impl]
+impl Foo {
+    #[optarg_method(DoSomething, exec)]
+    fn do_something<'a, 'b>(&'a self, s: &'b str, ...) { ... }
+}
+```
+
+Incorrect:
+
+```Rust
+#[optarg_impl]
+impl Foo {
+    #[optarg_method(DoSomething, exec)]
+    fn do_something(&self, s: &str, ...) { ... }
+}
+```
+
+### impl Trait is not supported
+
+Explicit type generics is a replacement of impl Trait in argument position.
+
+Correct:
+
+```Rust
+#[optarg_fn(PrintWith, exec)]
+fn print_with<'b, T: std::fmt::Display>(a: T, #[optarg_default] b: &'b str) {
+    println!("{}\n{}", b, a);
+}
+```
+
+Incorrect:
+
+```Rust
+#[optarg_fn(PrintWith, exec)]
+fn print_with<'b>(a: impl std::fmt::Display, #[optarg_default] b: &'b str) {
+    println!("{}\n{}", b, a);
+}
+```
+
+### Argument pattern
+
+Patterns like `(a, b): (i32, i8)` or `Foo { x }: Foo` in argument position are not allowd.
 
 ## License
 
