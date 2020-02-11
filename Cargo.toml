@@ -2,6 +2,12 @@
 name = "optarg2chain"
 version = "0.1.0"
 authors = ["T. Okubo <t.okubo.rx78+devel@gmail.com>"]
+description = "Converts optional arguments to chaining style."
+categories = ["rust-patterns", "no-std"]
+keywords = ["no_std"]
+repository = "https://github.com/garkimasera/optarg2chain"
+license = "MIT"
+readme = "README.md"
 edition = "2018"
 
 [lib]
