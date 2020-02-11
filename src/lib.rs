@@ -279,7 +279,6 @@ fn optarg_method(
     let return_type = self_replace.fold_return_type(input.sig.output.clone());
     let return_marker_type = return_marker_type(&return_type);
     let method_name = &input.sig.ident;
-    let (_, method_ty_generics, _) = input.sig.generics.split_for_impl();
     let merged_generics = merge_generics(impl_original_generics, &input.sig, self_ty);
     let (impl_generics, ty_generics, where_clause) = merged_generics.split_for_impl();
     let (original_receiver, receiver_ident, receiver_ty, args) =
@@ -311,11 +310,13 @@ fn optarg_method(
         doc_terminal_method,
     } = doc::generate_doc(&method_name, &opt_ident);
 
-    let inner_method: syn::ImplItem = syn::parse_quote! {
-        fn #inner_method_ident #method_ty_generics (
+    let mut inner_method: syn::ImplItemMethod = syn::parse_quote! {
+        fn #inner_method_ident (
             #(#original_receiver,)*
             #(#arg_name: #arg_ty,)*) #return_type #where_clause #inner_method_block
     };
+    inner_method.sig.generics = input.sig.generics.clone();
+    let inner_method: syn::ImplItem = inner_method.into();
 
     let item_struct: syn::ItemStruct = syn::parse_quote! {
         #doc_builder_struct
@@ -327,9 +328,9 @@ fn optarg_method(
         }
     };
 
-    let impl_item: syn::ImplItem = syn::parse_quote! {
+    let mut new_method: syn::ImplItemMethod = syn::parse_quote! {
         #(#other_attrs)*
-        #vis fn #method_name #method_ty_generics (
+        #vis fn #method_name (
             #(#original_receiver,)*
             #(#req_ident: #req_ty,)*
         ) -> #builder_struct_name #ty_generics {
@@ -345,6 +346,8 @@ fn optarg_method(
             }
         }
     };
+    new_method.sig.generics = input.sig.generics.clone();
+    let new_method: syn::ImplItem = new_method.into();
 
     let self_ty_no_generics = erase_generics(self_ty);
 
@@ -376,7 +379,7 @@ fn optarg_method(
         }
     };
 
-    Ok((vec![impl_item, inner_method], item_struct, struct_impl))
+    Ok((vec![new_method, inner_method], item_struct, struct_impl))
 }
 
 struct Arg<'a> {

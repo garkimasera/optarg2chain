@@ -53,6 +53,11 @@ impl<T: core::ops::Add<Output = T> + Default> Wrap<T> {
     {
         self.0 + a
     }
+
+    #[optarg_method(WrapConvertBuilder, exec)]
+    fn convert<U: From<T>>(self) -> Wrap<U> {
+        Wrap(self.0.into())
+    }
 }
 
 #[test]
