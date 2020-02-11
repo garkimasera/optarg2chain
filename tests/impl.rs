@@ -65,6 +65,7 @@ fn wrap_test() {
     let wrapped_int = Wrap(5i32);
     assert_eq!(wrapped_int.add().exec(), 5);
     assert_eq!(wrapped_int.add().a(4).exec(), 9);
+    assert_eq!(wrapped_int.convert::<i64>().exec().0, 5i64);
 }
 
 #[derive(Clone)]

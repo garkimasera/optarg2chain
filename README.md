@@ -83,7 +83,6 @@ assert_eq!(
 ```Rust
 use optarg2chain::optarg_impl;
 
-#[derive(Clone)]
 struct MyVec<T> {
     data: Vec<T>,
 }
@@ -139,7 +138,7 @@ Correct:
 ```Rust
 #[optarg_fn(PrintWith, exec)]
 fn print_with<'b, T: std::fmt::Display>(a: T, #[optarg_default] b: &'b str) {
-    println!("{}\n{}", b, a);
+    println!("{}\n{}", a, b);
 }
 ```
 
@@ -148,13 +147,13 @@ Incorrect:
 ```Rust
 #[optarg_fn(PrintWith, exec)]
 fn print_with<'b>(a: impl std::fmt::Display, #[optarg_default] b: &'b str) {
-    println!("{}\n{}", b, a);
+    println!("{}\n{}", a, b);
 }
 ```
 
 ### Argument pattern
 
-Patterns like `(a, b): (i32, i8)` or `Foo { x }: Foo` in argument position are not allowd.
+Patterns like `(a, b): (i32, i8)` or `Foo { x }: Foo` in argument position are not allowed.
 
 ## License
 
