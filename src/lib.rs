@@ -118,7 +118,7 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
         return TokenStream::from(e.to_compile_error());
     }
     let return_type = &item.sig.output;
-    let return_marker_type = return_marker_type(&return_type);
+    let struct_marker_type = generics::generate_type_holder(&item.sig.generics);
     let args: Vec<&syn::PatType> = item
         .sig
         .inputs
@@ -153,7 +153,7 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
         #vis struct #builder_struct_name #ty_generics {
             #(#req_ident: #req_ty,)*
             #(#opt_ident: core::option::Option<#opt_ty>,)*
-            _result_marker: core::marker::PhantomData<fn() -> #return_marker_type>
+            _optarg_marker: #struct_marker_type
         }
 
         impl #impl_generics #builder_struct_name #ty_generics {
@@ -198,7 +198,7 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #(
                     #opt_ident: core::option::Option::None,
                 )*
-                _result_marker: core::marker::PhantomData,
+                _optarg_marker: core::marker::PhantomData,
             }
         }
     };
@@ -277,12 +277,12 @@ fn optarg_method(
     let vis = input.vis;
     let mut self_replace = SelfReplace(self_ty);
     let return_type = self_replace.fold_return_type(input.sig.output.clone());
-    let return_marker_type = return_marker_type(&return_type);
     let method_name = &input.sig.ident;
     let merged_generics = merge_generics(impl_original_generics, &input.sig, self_ty);
     let (impl_generics, ty_generics, where_clause) = merged_generics.split_for_impl();
     let (original_receiver, receiver_ident, receiver_ty, args) =
         separate_receiver(&input.sig, self_ty)?;
+    let struct_marker_type = generics::generate_type_holder(&merged_generics);
 
     let replaced_args: Vec<syn::PatType> = args
         .iter()
@@ -324,7 +324,7 @@ fn optarg_method(
             #(#receiver_ident: #receiver_ty,)*
             #(#req_ident: #req_ty,)*
             #(#opt_ident: core::option::Option<#opt_ty>,)*
-            _result_marker: core::marker::PhantomData<fn() -> #return_marker_type>
+            _optarg_marker: #struct_marker_type,
         }
     };
 
@@ -342,7 +342,7 @@ fn optarg_method(
                 #(
                     #opt_ident: core::option::Option::None,
                 )*
-                _result_marker: core::marker::PhantomData,
+                _optarg_marker: core::marker::PhantomData,
             }
         }
     };
@@ -494,15 +494,6 @@ fn erase_optarg_attr(sig: &mut syn::Signature) {
             }
             _ => (),
         }
-    }
-}
-
-fn return_marker_type(return_type: &syn::ReturnType) -> syn::Type {
-    match return_type {
-        syn::ReturnType::Default => {
-            syn::parse_quote! { () }
-        }
-        syn::ReturnType::Type(_arrow, ty) => (**ty).clone(),
     }
 }
 

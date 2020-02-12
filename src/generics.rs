@@ -2,6 +2,8 @@
 
 use syn::fold::Fold;
 
+/// Merges generics parameters from impl and method.
+/// Ignores impl parameters that is not used in method signature.
 pub fn merge_generics(
     impl_original_generics: &syn::Generics,
     method_sig: &syn::Signature,
@@ -127,6 +129,18 @@ impl Fold for TypeFilterBuilder {
     fn fold_receiver(&mut self, receiver: syn::Receiver) -> syn::Receiver {
         self.0.has_receiver = true;
         receiver
+    }
+}
+
+/// Generates a type holder for struct. exapmle: `PhantomData<fn() -> (&'a (), T, U)>`
+pub fn generate_type_holder(generics: &syn::Generics) -> syn::Type {
+    let lifetimes: Vec<&syn::Lifetime> = generics.lifetimes().map(|l| &l.lifetime).collect();
+    let typeparams: Vec<&syn::Ident> = generics.type_params().map(|t| &t.ident).collect();
+    syn::parse_quote! {
+        core::marker::PhantomData<fn() -> (
+            #(&#lifetimes (),)*
+            #(#typeparams,)*
+        )>
     }
 }
 
