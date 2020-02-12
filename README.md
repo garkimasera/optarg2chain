@@ -5,6 +5,8 @@ Rust doesn't have optional or named arguments. This crate provide macros to conv
 
 ## Example
 
+### Function
+
 ```Rust
 use optarg2chain::optarg_fn;
 
@@ -28,7 +30,7 @@ struct JoinStringBuilder {
     a: String,
     b: core::option::Option<String>,
     c: core::option::Option<String>,
-    _result_marker: core::marker::PhantomData<fn() -> String>,
+    _optarg_marker: core::marker::PhantomData<fn() -> ()>,
 }
 impl JoinStringBuilder {
     fn b<_OPTARG_VALUE: core::convert::Into<String>>(mut self, value: _OPTARG_VALUE) -> Self {
@@ -60,7 +62,7 @@ fn join_strings(a: String) -> JoinStringBuilder {
         a,
         b: core::option::Option::None,
         c: core::option::Option::None,
-        _result_marker: core::marker::PhantomData,
+        _optarg_marker: core::marker::PhantomData,
     }
 }
 ```
@@ -77,6 +79,8 @@ assert_eq!(
     "xxxyyyzzz"
 );
 ```
+
+### Method
 
 `optarg_impl` and `optarg_method` attributes are prepared for methods.
 
@@ -105,6 +109,24 @@ assert_eq!(myvec.get_or(10).get(), 0);
 assert_eq!(myvec.get_or(10).other(42).get(), 42);
 ```
 
+### impl Trait
+
+```Rust
+#[optarg_fn(GenIter, iter)]
+fn gen_iter<T: Default>(
+    #[optarg_default] a: T,
+    #[optarg_default] b: T,
+    #[optarg_default] c: T,
+) -> impl Iterator<Item = T> {
+    vec![a, b, c].into_iter()
+}
+
+let iter = gen_iter::<i32>().iter();
+assert_eq!(iter.collect::<Vec<i32>>(), vec![0, 0, 0]);
+let iter = gen_iter::<i32>().a(1).b(2).c(3).iter();
+assert_eq!(iter.collect::<Vec<i32>>(), vec![1, 2, 3]);
+```
+
 ## Limitations
 
 ### References in argument types need to be given explicitly
@@ -129,7 +151,7 @@ impl Foo {
 }
 ```
 
-### impl Trait is not supported
+### impl Trait in argument position is not supported
 
 Explicit type generics is a replacement of impl Trait in argument position.
 
