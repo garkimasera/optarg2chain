@@ -160,3 +160,21 @@ fn twostr_test() {
         Box::new(TwoStr { a: "aaa", b: "bbb" })
     );
 }
+
+struct AsyncTest;
+
+#[optarg_impl]
+impl AsyncTest {
+    #[optarg_method(AsyncFn, exec)]
+    async fn async_fn<'a>(&'a self, #[optarg(3)] a: i32) -> i32 {
+        a
+    }
+}
+
+#[test]
+fn async_test() {
+    use futures::executor::block_on;
+    let a = AsyncTest;
+    assert_eq!(block_on(a.async_fn().exec()), 3);
+    assert_eq!(block_on(a.async_fn().a(6).exec()), 6);
+}

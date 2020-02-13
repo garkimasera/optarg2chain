@@ -101,3 +101,15 @@ fn convert_impl_trait_test() {
     let iter = iter_impl_trait::<i32>().a(1).b(2).c(3).iter();
     assert_eq!(iter.collect::<Vec<i32>>(), vec![1, 2, 3]);
 }
+
+#[optarg_fn(Async, exec)]
+async fn async_fn<'a>(#[optarg("foo")] a: &'a str) -> &'a str {
+    a
+}
+
+#[test]
+fn async_test() {
+    use futures::executor::block_on;
+    assert_eq!(block_on(async_fn().exec()), "foo");
+    assert_eq!(block_on(async_fn().a("bar").exec()), "bar");
+}

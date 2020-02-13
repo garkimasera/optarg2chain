@@ -135,6 +135,12 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
     let (arg_name, _, req_ident, req_ty, opt_ident, opt_ty, opt_default_value) =
         separate_args(&args);
     let func_attrs = &item.attrs;
+    let async_ = &item.sig.asyncness;
+    let await_ = if async_.is_some() {
+        Some(quote! { .await })
+    } else {
+        None
+    };
 
     let mut inner_func = item.clone();
     erase_optarg_attr(&mut inner_func.sig);
@@ -148,7 +154,7 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
         doc_terminal_method,
     } = doc::generate_doc(&func_name, &opt_ident);
 
-    let expanded = quote! {
+    TokenStream::from(quote! {
         #doc_builder_struct
         #vis struct #builder_struct_name #ty_generics {
             #(#req_ident: #req_ty,)*
@@ -168,7 +174,7 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
             )*
 
             #doc_terminal_method
-            #vis fn #terminal_method_name(self) #return_type #where_clause {
+            #vis #async_ fn #terminal_method_name(self) #return_type #where_clause {
                 #inner_func
 
                 #(
@@ -182,6 +188,7 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
                         #arg_name,
                     )*
                 )
+                #await_
             }
         }
 
@@ -201,9 +208,7 @@ pub fn optarg_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
                 _optarg_marker: core::marker::PhantomData,
             }
         }
-    };
-
-    TokenStream::from(expanded)
+    })
 }
 
 /// This attribute is used with `optarg_method` attribute.
@@ -292,6 +297,12 @@ fn optarg_method(
     let args = parse_typed_args(&args);
     let (arg_name, arg_ty, req_ident, req_ty, opt_ident, opt_ty, opt_default_value) =
         separate_args(&args);
+    let async_ = &input.sig.asyncness;
+    let await_ = if async_.is_some() {
+        Some(quote! { .await })
+    } else {
+        None
+    };
 
     let insert_self = if receiver_ident.is_empty() {
         vec![]
@@ -311,7 +322,7 @@ fn optarg_method(
     } = doc::generate_doc(&method_name, &opt_ident);
 
     let mut inner_method: syn::ImplItemMethod = syn::parse_quote! {
-        fn #inner_method_ident (
+        #async_ fn #inner_method_ident (
             #(#original_receiver,)*
             #(#arg_name: #arg_ty,)*) #return_type #where_clause #inner_method_block
     };
@@ -364,7 +375,7 @@ fn optarg_method(
             )*
 
             #doc_terminal_method
-            #vis fn #terminal_method_name(self) #return_type #where_clause {
+            #vis #async_ fn #terminal_method_name(self) #return_type #where_clause {
                 #(
                     let #receiver_ident: #receiver_ty = self.#receiver_ident;
                 )*
@@ -375,6 +386,7 @@ fn optarg_method(
                     let #opt_ident: #opt_ty = self.#opt_ident.unwrap_or_else(|| { #opt_default_value });
                 )*
                 #self_ty_no_generics::#inner_method_ident( #(#receiver_ident,)* #(#arg_name, )* )
+                #await_
             }
         }
     };
