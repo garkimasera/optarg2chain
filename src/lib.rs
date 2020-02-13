@@ -105,6 +105,8 @@ const ERR_MSG_TRAIT_IMPL: &str = "(optarg2chain) impl for traits is not supporte
 const ERR_MSG_IMPLICIT_LIFETIME: &str = "(optarg2chain) explicit lifetime is neeeded";
 const ERR_MSG_UNDERSCORE_ARG: &str = "(optarg2chain) `_` cannot be used for this argument name";
 const ERR_MSG_UNUSABLE_PAT: &str = "(optarg2chain) unusable pattern found";
+const ERR_MSG_UNSUPPORTED_FN_SIG: &str =
+    "(optarg2chain) function or method with `unsafe`, `const` or `extern` is not supported";
 
 /// Generates a builder struct and methods for the specified function.
 #[proc_macro_attribute]
@@ -598,6 +600,16 @@ fn separate_receiver<'a>(
 
 // Checks function signature and returns error if exists
 fn check_sig(sig: &syn::Signature) -> Result<()> {
+    if let Some(abi) = &sig.abi {
+        return Err(Error::new(abi.span(), ERR_MSG_UNSUPPORTED_FN_SIG));
+    }
+    if let Some(constness) = &sig.constness {
+        return Err(Error::new(constness.span(), ERR_MSG_UNSUPPORTED_FN_SIG));
+    }
+    if let Some(unsafety) = &sig.unsafety {
+        return Err(Error::new(unsafety.span(), ERR_MSG_UNSUPPORTED_FN_SIG));
+    }
+
     for arg in &sig.inputs {
         match arg {
             syn::FnArg::Typed(t) => match *t.pat {

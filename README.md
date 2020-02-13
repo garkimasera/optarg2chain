@@ -177,6 +177,10 @@ fn print_with<'b>(a: impl std::fmt::Display, #[optarg_default] b: &'b str) {
 
 Patterns like `(a, b): (i32, i8)` or `Foo { x }: Foo` in argument position are not allowed.
 
+### extern, const, unsafe
+
+Function or method with `unsafe`, `const` or `extern` is not supported.
+
 ## License
 
 MIT
