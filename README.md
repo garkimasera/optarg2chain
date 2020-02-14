@@ -1,4 +1,5 @@
-# optarg2chain ![Rust](https://github.com/garkimasera/optarg2chain/workflows/Rust/badge.svg)
+# optarg2chain ![Rust](https://github.com/garkimasera/optarg2chain/workflows/Rust/badge.svg) [![crates.io](https://img.shields.io/crates/v/optarg2chain.svg)](https://crates.io/crates/optarg2chain) [![Documentation](https://docs.rs/optarg2chain/badge.svg)](https://docs.rs/optarg2chain)
+
 Converts optional arguments to chaining style.
 
 Rust doesn't have optional or named arguments. This crate provide macros to convert optional arguments given by attributes to method chaining style instead.
